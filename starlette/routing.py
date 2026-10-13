@@ -166,6 +166,16 @@ def compile_path(
     return re.compile(path_regex), path_format, param_convertors
 
 
+def _literal_prefix(path: str) -> str:
+    """
+    Return the literal text before the first path parameter. Any path that
+    matches the compiled regex for `path` must start with this prefix, so it
+    can be used as a cheap pre-check before running the regex.
+    """
+    match = PARAM_REGEX.search(path)
+    return path if match is None else path[: match.start()]
+
+
 class BaseRoute:
     def matches(self, scope: Scope) -> tuple[Match, Scope]:
         raise NotImplementedError()  # pragma: no cover
@@ -197,6 +207,10 @@ class BaseRoute:
 
 
 class Route(BaseRoute):
+    # Literal prefix that every matching path starts with. Subclasses that
+    # don't call `__init__` fall back to always running the regex.
+    _path_prefix = ""
+
     def __init__(
         self,
         path: str,
@@ -240,11 +254,14 @@ class Route(BaseRoute):
                 self.methods.add("HEAD")
 
         self.path_regex, self.path_format, self.param_convertors = compile_path(path)
+        self._path_prefix = _literal_prefix(path)
 
     def matches(self, scope: Scope) -> tuple[Match, Scope]:
         path_params: dict[str, Any]
         if scope["type"] == "http":
             route_path = get_route_path(scope)
+            if not route_path.startswith(self._path_prefix):
+                return Match.NONE, {}
             match = self.path_regex.match(route_path)
             if match:
                 matched_params = match.groupdict()
@@ -297,6 +314,8 @@ class Route(BaseRoute):
 
 
 class WebSocketRoute(BaseRoute):
+    _path_prefix = ""
+
     def __init__(
         self,
         path: str,
@@ -325,11 +344,14 @@ class WebSocketRoute(BaseRoute):
                 self.app = cls(self.app, *args, **kwargs)
 
         self.path_regex, self.path_format, self.param_convertors = compile_path(path)
+        self._path_prefix = _literal_prefix(path)
 
     def matches(self, scope: Scope) -> tuple[Match, Scope]:
         path_params: dict[str, Any]
         if scope["type"] == "websocket":
             route_path = get_route_path(scope)
+            if not route_path.startswith(self._path_prefix):
+                return Match.NONE, {}
             match = self.path_regex.match(route_path)
             if match:
                 matched_params = match.groupdict()

@@ -5,7 +5,7 @@ import functools
 import json
 import uuid
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Generator
-from typing import Never, TypedDict
+from typing import Any, Never, TypedDict
 
 import pytest
 
@@ -14,7 +14,7 @@ from starlette.exceptions import HTTPException
 from starlette.middleware import Middleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, Response
-from starlette.routing import Host, Mount, NoMatchFound, Route, Router, WebSocketRoute
+from starlette.routing import Host, Match, Mount, NoMatchFound, Route, Router, WebSocketRoute, compile_path
 from starlette.testclient import TestClient
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from starlette.websockets import WebSocket, WebSocketDisconnect
@@ -1237,3 +1237,34 @@ def test_paths_with_root_path(test_client_factory: TestClientFactory) -> None:
         "path": "/root/root-queue/path",
         "root_path": "/root",
     }
+
+
+def test_route_subclass_without_init_still_matches() -> None:
+    # Subclasses (e.g. FastAPI's APIRoute) may set up the route attributes
+    # themselves without calling `Route.__init__`.
+    class CustomRoute(Route):
+        def __init__(self, path: str, endpoint: Callable[..., Any]) -> None:
+            self.path = path
+            self.endpoint = endpoint
+            self.methods = None
+            self.path_regex, self.path_format, self.param_convertors = compile_path(path)
+
+    route = CustomRoute("/users/{id:int}", homepage)
+    scope = {"type": "http", "path": "/users/1", "root_path": "", "method": "GET"}
+    match, child_scope = route.matches(scope)
+    assert match is Match.FULL
+    assert child_scope["path_params"] == {"id": 1}
+    assert route.matches({**scope, "path": "/other/1"})[0] is Match.NONE
+
+
+def test_route_literal_prefix_precheck() -> None:
+    route = Route("/users/{id:int}/items", homepage)
+    scope = {"type": "http", "root_path": "", "method": "GET"}
+    assert route.matches({**scope, "path": "/users/1/items"})[0] is Match.FULL
+    assert route.matches({**scope, "path": "/user/1/items"})[0] is Match.NONE
+    assert route.matches({**scope, "path": "/users/x/items"})[0] is Match.NONE
+
+    websocket_route = WebSocketRoute("/ws/{room}", homepage)
+    ws_scope = {"type": "websocket", "root_path": ""}
+    assert websocket_route.matches({**ws_scope, "path": "/ws/lobby"})[0] is Match.FULL
+    assert websocket_route.matches({**ws_scope, "path": "/wss/lobby"})[0] is Match.NONE
