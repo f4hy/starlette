@@ -26,6 +26,9 @@ from starlette.datastructures import URL, Headers, MutableHeaders
 from starlette.requests import ClientDisconnect
 from starlette.types import Message, Receive, Scope, Send
 
+# A tuple rather than `bytes | memoryview`: the union is rebuilt on every evaluation.
+_BYTES_TYPES = (bytes, memoryview)
+
 
 class Response:
     media_type = None
@@ -49,7 +52,7 @@ class Response:
     def render(self, content: Any) -> bytes | memoryview:
         if content is None:
             return b""
-        if isinstance(content, bytes | memoryview):
+        if isinstance(content, _BYTES_TYPES):
             return content
         return content.encode(self.charset)  # type: ignore
 
@@ -250,7 +253,7 @@ class StreamingResponse(Response):
     async def stream_response(self, send: Send) -> None:
         await send({"type": "http.response.start", "status": self.status_code, "headers": self.raw_headers})
         async for chunk in self.body_iterator:
-            if not isinstance(chunk, bytes | memoryview):
+            if not isinstance(chunk, _BYTES_TYPES):
                 chunk = chunk.encode(self.charset)
             await send({"type": "http.response.body", "body": chunk, "more_body": True})
 
