@@ -3,7 +3,7 @@ from __future__ import annotations
 import ipaddress
 from collections.abc import ItemsView, Iterable, Iterator, KeysView, Mapping, MutableMapping, Sequence, ValuesView
 from shlex import shlex
-from typing import Any, BinaryIO, Literal, NamedTuple, TypeVar, cast
+from typing import Any, BinaryIO, Literal, NamedTuple, TypeVar, cast, overload
 from urllib.parse import SplitResult, parse_qsl, urlencode, urlsplit
 
 from starlette._utils import parse_host_header
@@ -17,6 +17,7 @@ class Address(NamedTuple):
 
 
 _KeyType = TypeVar("_KeyType")
+_T = TypeVar("_T")
 # Mapping keys are invariant but their values are covariant since
 # you can only read them
 # that is, you can't do `Mapping[str, Animal]()["fido"] = Dog()`
@@ -555,6 +556,20 @@ class Headers(Mapping[str, str]):
             if header_key == get_header_key:
                 return header_value.decode("latin-1")
         raise KeyError(key)
+
+    @overload
+    def get(self, key: str) -> str | None: ...
+
+    @overload
+    def get(self, key: str, default: str | _T) -> str | _T: ...
+
+    def get(self, key: str, default: Any = None) -> Any:
+        # Avoid `Mapping.get()`, which raises and catches a `KeyError` on every miss.
+        get_header_key = key.lower().encode("latin-1")
+        for header_key, header_value in self._list:
+            if header_key == get_header_key:
+                return header_value.decode("latin-1")
+        return default
 
     def __contains__(self, key: Any) -> bool:
         get_header_key = key.lower().encode("latin-1")
