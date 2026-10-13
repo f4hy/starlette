@@ -399,6 +399,20 @@ def test_gzip_custom_exclude_content_types(test_client_factory: TestClientFactor
     assert "Vary" not in response.headers
 
 
+def test_gzip_exclude_content_types_as_list(test_client_factory: TestClientFactory) -> None:
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
+        await send({"type": "http.response.start", "status": 200, "headers": [(b"content-type", b"application/zip")]})
+        await send({"type": "http.response.body", "body": b"x" * 4000})
+
+    exclude_content_types = ["Application/Zip; foo=bar"]
+    middleware = GZipMiddleware(app, exclude_content_types=exclude_content_types)  # type: ignore[arg-type]
+
+    client = test_client_factory(middleware)
+    response = client.get("/", headers={"accept-encoding": "gzip"})
+    assert response.content == b"x" * 4000
+    assert "Content-Encoding" not in response.headers
+
+
 @pytest.mark.parametrize("content_type", ["text/event-stream", "application/grpc+proto"])
 def test_gzip_cleared_exclude_content_types(test_client_factory: TestClientFactory, content_type: str) -> None:
     async def app(scope: Scope, receive: Receive, send: Send) -> None:
