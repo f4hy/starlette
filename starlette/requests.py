@@ -255,9 +255,27 @@ class Request(HTTPConnection[StateT]):
     async def body(self) -> bytes:
         if not hasattr(self, "_body"):
             chunks: list[bytes] = []
-            async with aclosing(self.stream()) as stream:
-                async for chunk in stream:
-                    chunks.append(chunk)
+            if type(self).stream is Request.stream:
+                # Read the messages directly rather than through the `stream()`
+                # async generator, which is comparatively expensive to set up and
+                # tear down for the common single-message body.
+                if self._stream_consumed:
+                    raise RuntimeError("Stream consumed")
+                while not self._stream_consumed:
+                    message = await self._receive()
+                    if message["type"] == "http.request":
+                        body = message.get("body", b"")
+                        if not message.get("more_body", False):
+                            self._stream_consumed = True
+                        if body:
+                            chunks.append(body)
+                    elif message["type"] == "http.disconnect":  # pragma: no branch
+                        self._is_disconnected = True
+                        raise ClientDisconnect()
+            else:
+                async with aclosing(self.stream()) as stream:
+                    async for chunk in stream:
+                        chunks.append(chunk)
             self._body = b"".join(chunks)
         return self._body
 

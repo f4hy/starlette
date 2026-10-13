@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Iterator
+from collections.abc import AsyncGenerator, Iterator
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -711,3 +711,22 @@ def test_request_url_starlette_context(test_client_factory: TestClientFactory) -
     client = test_client_factory(app)
     client.get("/home")
     assert url_for == URL("http://testserver/home")
+
+
+@pytest.mark.anyio
+async def test_request_body_uses_overridden_stream() -> None:
+    class UpperRequest(Request):
+        async def stream(self) -> AsyncGenerator[bytes, None]:
+            async for chunk in super().stream():
+                yield chunk.upper()
+
+    messages: list[Message] = [
+        {"type": "http.request", "body": b"abc", "more_body": True},
+        {"type": "http.request", "body": b"def", "more_body": False},
+    ]
+
+    async def receive() -> Message:
+        return messages.pop(0)
+
+    request = UpperRequest({"type": "http", "headers": []}, receive)
+    assert await request.body() == b"ABCDEF"
