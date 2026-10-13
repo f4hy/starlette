@@ -259,7 +259,8 @@ class Route(BaseRoute):
     def matches(self, scope: Scope) -> tuple[Match, Scope]:
         path_params: dict[str, Any]
         if scope["type"] == "http":
-            route_path = get_route_path(scope)
+            # Fast path for the common case of no `root_path`.
+            route_path = get_route_path(scope) if scope.get("root_path") else scope["path"]
             if not route_path.startswith(self._path_prefix):
                 return Match.NONE, {}
             match = self.path_regex.match(route_path)
