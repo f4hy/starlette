@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import functools
 import zlib
+from collections.abc import Iterable
 from typing import NoReturn
 
 import anyio.lowlevel
@@ -227,4 +229,17 @@ async def unattached_send(message: Message) -> NoReturn:
 
 
 def _normalize_content_types(content_types: tuple[str, ...]) -> tuple[str, ...]:
+    # Responders are built per request, so cache the result for the (hashable)
+    # tuples that `GZipMiddleware` passes them.
+    if isinstance(content_types, tuple):
+        return _normalize_content_types_cached(content_types)
+    return _normalize(content_types)
+
+
+def _normalize(content_types: Iterable[str]) -> tuple[str, ...]:
     return tuple(content_type.partition(";")[0].strip().lower() for content_type in content_types)
+
+
+@functools.lru_cache(maxsize=32)
+def _normalize_content_types_cached(content_types: tuple[str, ...]) -> tuple[str, ...]:
+    return _normalize(content_types)
