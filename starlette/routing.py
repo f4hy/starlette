@@ -278,10 +278,8 @@ class Route(BaseRoute):
         return Match.NONE, {}
 
     def url_path_for(self, name: str, /, **path_params: Any) -> URLPath:
-        seen_params = set(path_params.keys())
-        expected_params = set(self.param_convertors.keys())
-
-        if name != self.name or seen_params != expected_params:
+        # Dict key views compare like sets, without building any.
+        if name != self.name or path_params.keys() != self.param_convertors.keys():
             raise NoMatchFound(name, path_params)
 
         path, remaining_params = replace_params(self.path_format, self.param_convertors, path_params)
@@ -365,10 +363,8 @@ class WebSocketRoute(BaseRoute):
         return Match.NONE, {}
 
     def url_path_for(self, name: str, /, **path_params: Any) -> URLPath:
-        seen_params = set(path_params.keys())
-        expected_params = set(self.param_convertors.keys())
-
-        if name != self.name or seen_params != expected_params:
+        # Dict key views compare like sets, without building any.
+        if name != self.name or path_params.keys() != self.param_convertors.keys():
             raise NoMatchFound(name, path_params)
 
         path, remaining_params = replace_params(self.path_format, self.param_convertors, path_params)
