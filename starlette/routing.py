@@ -34,8 +34,13 @@ class NoMatchFound(Exception):
     """
 
     def __init__(self, name: str, path_params: dict[str, Any]) -> None:
-        params = ", ".join(list(path_params.keys()))
-        super().__init__(f'No route exists for name "{name}" and params "{params}".')
+        # Routers raise and catch this once per non-matching route during URL
+        # lookups, so the message is only formatted when it is actually needed.
+        super().__init__(name, list(path_params))
+
+    def __str__(self) -> str:
+        name, params = self.args
+        return f'No route exists for name "{name}" and params "{", ".join(params)}".'
 
 
 class Match(Enum):
