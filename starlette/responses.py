@@ -181,6 +181,11 @@ class PlainTextResponse(Response):
     media_type = "text/plain"
 
 
+# `json.dumps()` builds a new `JSONEncoder` on every call when given non-default
+# options. The encoder holds no per-call state, so one instance can be shared.
+_json_encoder = json.JSONEncoder(ensure_ascii=False, allow_nan=False, indent=None, separators=(",", ":"))
+
+
 class JSONResponse(Response):
     media_type = "application/json"
 
@@ -195,13 +200,7 @@ class JSONResponse(Response):
         super().__init__(content, status_code, headers, media_type, background)
 
     def render(self, content: Any) -> bytes:
-        return json.dumps(
-            content,
-            ensure_ascii=False,
-            allow_nan=False,
-            indent=None,
-            separators=(",", ":"),
-        ).encode("utf-8")
+        return _json_encoder.encode(content).encode("utf-8")
 
 
 class RedirectResponse(Response):
